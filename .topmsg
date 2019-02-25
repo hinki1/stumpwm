@@ -1,0 +1,11 @@
+From: Matthias Hinkfoth <hinki@abwesend.de>
+Subject: date format in modeline differs from date(1)
+
+The behaviour of time.lisp is swapped in comparison to 'date'.
+
+$ date --version | head -n 1
+date (GNU coreutils) 8.5
+
+$ date --help | grep -F 'day of month'
+  %d   day of month (e.g, 01)
+  %e   day of month, space padded; same as %_d
