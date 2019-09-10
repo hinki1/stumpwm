@@ -332,9 +332,23 @@ _NET_WM_STATE_DEMANDS_ATTENTION set"
   (when-let ((name (xlib:get-property win :_NET_WM_NAME)))
     (utf8-to-string name)))
 
+(defun safely-decode-x11-string (string)
+  (handler-case
+      (map 'string 'xlib:card8->char string)
+    (type-error () nil)))
+
+(defun xwin-wm-name (win)
+  (multiple-value-bind
+        (name encoding)
+      (xlib:get-property win :WM_NAME :result-type '(vector (unsigned-byte 8)))
+    (when name
+      (if (eq encoding :string)
+          (safely-decode-x11-string name)
+          (utf8-to-string name)))))
+
 (defun xwin-name (win)
   (escape-caret (or (xwin-net-wm-name win)
-                    (xlib:wm-name win)
+                    (xwin-wm-name win)
                     "")))
 
 (defun update-configuration (win)
@@ -769,6 +783,8 @@ and bottom_end_x."
         do (loop for j in (screen-mapped-windows i)
                  do (xwin-grab-keys j (window-group (find-window j))))
         do (xwin-grab-keys (screen-focus-window i) (screen-current-group i)))
+  (when (current-window)
+    (remap-keys-grab-keys (current-window)))
   (xlib:display-finish-output *display*))
 
 (defun netwm-remove-window (window)
