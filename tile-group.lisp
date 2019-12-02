@@ -95,11 +95,12 @@
 (defmethod group-move-request ((group tile-group) (window tile-window) x y relative-to)
   (when *honor-window-moves*
     (dformat 3 "Window requested new position ~D,~D relative to ~S~%" x y relative-to)
-    (let* ((pos  (if (eq relative-to :parent)
+    (let* ((pointer-pos (multiple-value-list (xlib:global-pointer-position *display*)))
+           (pos  (if (eq relative-to :parent)
                      (list
                       (+ (xlib:drawable-x (window-parent window)) x)
                       (+ (xlib:drawable-y (window-parent window)) y))
-                     (list x y)))
+                     (list (first pointer-pos) (second pointer-pos))))
            (frame (apply #'find-frame group pos)))
       (when frame
         (pull-window window frame)))))
@@ -176,9 +177,13 @@
 
 ;; TODO: This method has not been updated for floating windows
 (defmethod group-remove-head ((group tile-group) head)
-  (let ((windows (head-windows group head)))
-    ;; Remove it from the frame tree.
-    (setf (tile-group-frame-tree group) (delete (tile-group-frame-head group head) (tile-group-frame-tree group)))
+  ;; first ensure the data is up to date
+  (group-sync-all-heads group)
+  (let ((windows (head-windows group head))
+        (frames-to-delete (tile-group-frame-head group head))
+        (group-frame-tree (tile-group-frame-tree group)))
+    ;; Remove this head's frames from the frame tree.
+    (setf (tile-group-frame-tree group) (delete frames-to-delete group-frame-tree))
     ;; Just set current frame to whatever.
     (let ((frame (first (group-frames group))))
       (setf (tile-group-current-frame group) frame
@@ -222,11 +227,9 @@
                   (group-windows-for-cycling group :sorting t))))
 
 (defun tile-group-frame-head (group head)
-  (group-sync-all-heads group)
   (elt (tile-group-frame-tree group) (position head (group-heads group))))
 
 (defun (setf tile-group-frame-head) (frame group head)
-  (group-sync-all-heads group)
   (setf (elt (tile-group-frame-tree group) (position head (group-heads group))) frame))
 
 (defun populate-frames (group)
@@ -338,7 +341,8 @@ T (default) then also focus the frame."
     (unless (and w (eq oldw w))
       (if w
           (raise-window w)
-          (mapc 'hide-window (frame-windows g f))))
+          (mapc 'hide-window
+                (reverse (frame-windows g f)))))
     ;; If raising a window in the current frame we must focus it or
     ;; the group and screen will get out of sync.
     (when (or focus
