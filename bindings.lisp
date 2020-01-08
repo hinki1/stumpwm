@@ -26,7 +26,6 @@
 
 (export '(*groups-map*
           *group-top-maps*
-          *movement-map*
           *help-map*
           set-prefix-key))
 
@@ -184,6 +183,7 @@ is a tile group.")
   (kbd "F")       "curframe"
   (kbd "-")       "fclear"
   (kbd "Q")       "only"
+  (kbd "q")       "quit-confirm"
   (kbd "Up")      "move-focus up"
   (kbd "Down")    "move-focus down"
   (kbd "Left")    "move-focus left"

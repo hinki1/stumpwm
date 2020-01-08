@@ -900,9 +900,11 @@ Describe the specified command.
 @@@ ungrab-pointer
 ### *banish-pointer-to*
 
+@@@ final-key-p
+@@@ help-key-p
+@@@ cancel-key-p
 ### *editor-bindings*
 ### *numpad-map*
-
 
 @node Modifiers, Remapped Keys, Binding Keys, Key Bindings
 @section Modifiers
@@ -1469,6 +1471,8 @@ return a ``nil'' value in those cases, and let the command handle that.
 ### *suppress-echo-timeout*
 !!! echo
 @@@ err
+@@@ wrap
+### *message-max-width*
 !!! colon
 
 %%% with-restarts-menu
@@ -1824,6 +1828,7 @@ window pool, where windows and frames are not so tightly connected.
 %%% save-frame-excursion
 
 @@@ run-or-pull
+@@@ only-one-frame-p
 
 ### *min-frame-width*
 ### *min-frame-height*
@@ -2167,6 +2172,17 @@ multiplexer to actually run it.
 @@@ getenv
 @@@ (setf getenv)
 
+@node Interacting With X11, Miscellaneous Commands, Interacting With Unix, Top
+@chapter Interacting With X11
+
+@@@ set-x-selection
+@@@ get-x-selection
+### *default-selections*
+### *x-selection*
+
+@node Miscellaneous Commands, Colors, Interacting With X11, Top
+@chapter Miscellaneous Commands
+The following is a list of commands that don't really fit in any other
 @@@ split-string
 
 @@@ argument-line-end-p
@@ -2183,26 +2199,6 @@ multiplexer to actually run it.
 @@@ no-focus
 ### *record-last-msg-override*
 ### *toplevel-io*
-
-@node Interacting With X11, Miscellaneous Commands, Interacting With Unix, Top
-@chapter Interacting With X11
-
-@@@ set-x-selection
-@@@ get-x-selection
-### *x-selection*
-@@@ update-decoration
-
-@node Miscellaneous Commands, Colors, Interacting With X11, Top
-@chapter Miscellaneous Commands
-
-@menu
-* Menus::
-* StumpWM's Data Directory::
-* Debugging StumpWM::
-* Sending a Bug Report::
-* Timers::
-* Getting Help::
-@end menu
 
 @node Menus, StumpWM's Data Directory, Miscellaneous Commands
 @section Menus

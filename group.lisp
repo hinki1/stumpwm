@@ -362,10 +362,10 @@ Groups are known as \"virtual desktops\" in the NETWM standard."
 
 (defun add-group (screen name &key background (type *default-group-type*))
   "Create a new group in SCREEN with the supplied name. group names
-    starting with a . are considered hidden groups. Hidden groups are
-    skipped by gprev and gnext and do not show up in the group
-    listings (unless *list-hidden-groups* is T). They also use negative
-    numbers."
+starting with a . are considered hidden groups. Hidden groups are
+skipped by gprev and gnext and do not show up in the group
+listings (unless *list-hidden-groups* is T). They also use negative
+numbers."
   (check-type screen screen)
   (check-type name string)
   (assert (not (member name '("" ".") :test #'string=)) (name) "Groups must have a name.")
@@ -460,10 +460,10 @@ window along."
 (defcommand grename (name) ((:string "New name for group: "))
   "Rename the current group."
   (cond ((find-group (current-screen) name)
-         (message "^1*^BError: Name already exists"))
+         (message "^1*^BError: Name already exists."))
         ((or (zerop (length name))
              (string= name "."))
-         (message "^1*^BError: Name cannot be empty name"))
+         (message "^1*^BError: Name cannot be empty name."))
         (t (%grename name (current-group)))))
 
 (defun echo-groups (screen fmt &optional verbose (wfmt *window-format*))
@@ -496,16 +496,15 @@ the default group formatting and window formatting, respectively."
                (or gfmt *group-format*)
                t (or wfmt *window-format*)))
 
-(defcommand gselect (to-group) ((:group "Select Group: "))
-"Select the first group that starts with
-@var{substring}. @var{substring} can also be a number, in which case
-@command{gselect} selects the group with that number."
-  (when to-group
-    (switch-to-group to-group)))
+(defcommand gselect (&optional to-group) (:rest)
+  "Accepts numbers to select a group, otherwise grouplist selects."
+  (if-let ((to-group (when to-group
+                       (select-group (current-screen) to-group))))
+    (switch-to-group to-group)
+    (grouplist)))
 
 (defcommand grouplist (&optional (fmt *group-format*)) (:rest)
-  "Allow the user to select a group from a list, like windowlist but
-  for groups"
+  "Allow the user to select a group from a list, like windowlist for groups."
   (when-let ((group (second (select-from-menu
                              (current-screen)
                              (mapcar (lambda (g)
@@ -552,9 +551,9 @@ The windows will be moved to group \"^B^2*~a^n\"
             (progn
               (switch-to-group to-group)
               (kill-group dead-group to-group)
-              (message "Deleted"))
-            (message "Canceled"))
-        (message "There's only one group left"))))
+              (message "Deleted."))
+            (message "Canceled."))
+        (message "There's only one group left."))))
 
 (defcommand gkill-other () ()
 "Kill other groups. All windows in other groups are migrated

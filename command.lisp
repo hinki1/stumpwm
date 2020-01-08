@@ -363,13 +363,14 @@ then describes the symbol."
 
 (define-stumpwm-type :command (input prompt)
   (or (argument-pop input)
-      (completing-read (current-screen)
-                       prompt
-                       (all-commands))))
+      (car (select-from-menu (current-screen)
+                             (all-commands)
+                             prompt
+                             0))))
 
 (define-stumpwm-type :key-seq (input prompt)
   (labels ((update (seq)
-             (message "~a: ~{~a ~}"
+             (message "~a ~{~a ~}"
                       prompt
                       (mapcar 'print-key (reverse seq)))))
     (let ((rest (argument-pop-rest input)))
@@ -390,7 +391,7 @@ then describes the symbol."
                      :test #'string=
                      :key #'window-map-number)))
       (window-number win)
-      (throw 'error "No Such Window."))))
+      (throw 'error "No such window."))))
 
 (define-stumpwm-type :number (input prompt)
   (when-let ((n (or (argument-pop input)
@@ -467,7 +468,7 @@ then describes the symbol."
                                                   (mapcar 'group-name
                                                           (screen-groups (current-screen))))))))
     (or match
-        (throw 'error "No Such Group."))))
+        (throw 'error "No such group."))))
 
 (define-stumpwm-type :frame (input prompt)
   (declare (ignore prompt))
@@ -591,8 +592,14 @@ String arguments with spaces may be passed to the command by
 delimiting them with double quotes. A backslash can be used to escape
 double quotes or backslashes inside the string. This does not apply to
 commands taking :REST or :SHELL type arguments."
-  (let ((cmd (completing-read (current-screen) ": " (all-commands) :initial-input (or initial-input ""))))
-    (unless cmd
-      (throw 'error :abort))
-    (when (plusp (length cmd))
-      (eval-command cmd t))))
+  (let* ((commands (all-commands))
+         (cmd (select-from-menu (current-screen)
+                                (mapcar #'list commands)
+                                ":"
+                                (or (position initial-input
+                                              commands
+                                              :test #'string-equal)
+                                    0))))
+    (if cmd
+        (eval-command (car cmd) t)
+        (throw 'error :abort))))
