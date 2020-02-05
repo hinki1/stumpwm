@@ -42,10 +42,12 @@
 ;;; General Utilities
 
 (defun take (n list)
-  "Returns a list with the first n elements of the given list."
-  (loop repeat n
-        for x in list
-        collect x))
+  "Returns a list with the first n elements of the given list, and the
+remaining tail of the list as a second value."
+  (loop for l on list
+        repeat n
+        collect (car l) into result
+        finally (return (values result l))))
 
 ;; This could use a much more efficient algorithm.
 ;; But for our purposes with small lists it's likely ok.
@@ -335,7 +337,9 @@ match with an element of the completions."
                                       (caar compls)
                                       (car compls))))))
              (key-loop ()
-               (loop for key = (read-key-or-selection) do
+               (loop for key = (with-focus (screen-input-window screen)
+                                 (read-key-or-selection))
+                     do
                     (cond ((stringp key)
                            ;; handle selection
                            (input-insert-string input key)
@@ -350,9 +354,7 @@ match with an element of the completions."
       (draw-input-bucket screen prompt input)
       (setup-input-window screen prompt input)
       (catch :abort
-        (unwind-protect
-             (with-focus (screen-input-window screen)
-               (key-loop))
+        (unwind-protect (key-loop)
           (shutdown-input-window screen))))))
 
 (defun read-one-char (screen)
@@ -376,6 +378,26 @@ match with an element of the completions."
      (* (font-height font) index)
      (font-ascent font)))
 
+
+(defun get-completion-preview-list (input-line all-completions)
+  (if (string= "" input-line)
+      '()
+      (multiple-value-bind (completions more)
+          (take *maximum-completions*
+                (remove-duplicates
+                  (remove-if
+                    (lambda (str)
+                      (or (string= str "")
+                          (< (length str) (length input-line))
+                          (string/= input-line
+                                    (subseq str 0 (length input-line)))))
+                    all-completions)
+                  :test #'string=))
+        (if more
+            (append (butlast completions)
+                    (list (format nil "... and ~D more" (1+ (length more)))))
+            completions))))
+
 (defun draw-input-bucket (screen prompt input &optional (tail "") errorp)
   "Draw to the screen's input window the contents of input."
   (let* ((gcontext (screen-message-gc screen))
@@ -384,12 +406,7 @@ match with an element of the completions."
          (prompt-lines (ppcre:split #\Newline prompt))
          (prompt-lines-length (length prompt-lines))
          (input-line (input-line-string input))
-         (completions (take *maximum-completions* (remove-if (lambda (str)
-                                                               (or (string= str "")
-                                                                   (< (length str) (length input-line))
-                                                                   (string/= input-line
-                                                                             (subseq str 0 (length input-line)))))
-                                                             *input-completions*)))
+         (completions (get-completion-preview-list input-line *input-completions*))
          (completions-length (length completions))
          (prompt-offset (text-line-width font
                                          (first (last prompt-lines))
