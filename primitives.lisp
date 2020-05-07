@@ -834,7 +834,7 @@ output directly to a file.")
 (defun dformat (level fmt &rest args)
   (when (>= *debug-level* level)
     (multiple-value-bind (sec m h) (get-decoded-system-time)
-      (format *debug-stream* "~2,'0d:~2,'0d:~2,'0d " h m sec))
+      (format *debug-stream* "~2,'0d:~2,'0d:~2,'0d ~2,' d " h m sec level))
     ;; strip out non base-char chars quick-n-dirty like
     (write-string (map 'string (lambda (ch)
                                  (if (typep ch 'standard-char)
@@ -1121,7 +1121,7 @@ add rules")
   "Create a rule that matches windows and automatically places them in
 a specified group and frame. Each frame rule is a lambda list:
 @example
-\(frame-number raise lock &key create restore dump-name class instance type role title)
+\(frame-number raise lock &key from-group create restore dump-name class instance type role title)
 @end example
 
 @table @var
