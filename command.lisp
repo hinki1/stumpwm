@@ -63,7 +63,7 @@ called from a keybinding or from the colon command.
 The NAME argument can be a string, or a list of two symbols. If the
 latter, the first symbol names the command, and the second indicates
 the type of group under which this command will be usable. Currently,
-tile-group and floating-group are the two possible values.
+tile-group, floating-group and dynamic-group are the possible values.
 
 INTERACTIVE-ARGS is a list of the following form: ((TYPE PROMPT) (TYPE PROMPT) ...)
 
@@ -107,6 +107,8 @@ A shell command
 The rest of the input yet to be parsed.
 @item :module
 An existing stumpwm module
+@item :rotation
+A rotation symbol. One of :CL, :CLOCKWISE, :CCL, OR :COUNTERCLOCKWISE
 @end table
 
 Note that new argument types can be created with DEFINE-STUMPWM-TYPE.
@@ -174,7 +176,12 @@ whatever it finds: a command, an alias, or nil."
            *command-hash*))
 
 (defun command-active-p (command)
-  (typep (current-group) (command-class command))
+  (declare (special *dynamic-group-blacklisted-commands*))
+  (let ((active (typep (current-group) (command-class command))))
+    (if (typep (current-group) 'dynamic-group)
+        (unless (member command *dynamic-group-blacklisted-commands*)
+          active)
+        active))
   ;; TODO: minor modes
   )
 
@@ -331,9 +338,10 @@ then describes the symbol."
       ,@body)))
 
 (define-stumpwm-type :y-or-n (input prompt)
-  (let ((s (or (argument-pop input)
-               (read-one-line (current-screen) (concat prompt "(y/n): ")))))
-    (equal s "y")))
+  (let* ((positive-responses '("y" t))
+         (s (or (argument-pop input)
+                (read-one-line (current-screen) (concat prompt "(y/n): ")))))
+    (member s positive-responses :test #'equalp)))
 
 (defun lookup-symbol (string)
   ;; FIXME: should we really use string-upcase?
@@ -378,8 +386,7 @@ then describes the symbol."
           ;; read a key sequence from the user
           (with-focus (screen-key-window (current-screen))
             (message "~a" prompt)
-            (nreverse (second (multiple-value-list
-                               (read-from-keymap (top-maps) #'update)))))))))
+            (nreverse (nth-value 1 (read-from-keymap (top-maps) #'update))))))))
 
 (define-stumpwm-type :window-number (input prompt)
   (when-let ((n (or (argument-pop input)
@@ -393,11 +400,20 @@ then describes the symbol."
       (window-number win)
       (throw 'error "No such window."))))
 
+(defun parse-fraction (n)
+  "Parse two integers separated by a / and divide the first by the second. "
+  (multiple-value-bind (num i) (parse-integer n :junk-allowed t)
+    (cond ((= i (length n))
+           num)
+          ((char-equal (char n i) #\/)
+           (/ num (parse-integer (subseq n (+ i 1)))))
+          (t (error 'parse-error)))))
+
 (define-stumpwm-type :number (input prompt)
   (when-let ((n (or (argument-pop input)
                     (read-one-line (current-screen) prompt))))
     (handler-case
-        (parse-integer n)
+        (parse-fraction n)
       (parse-error (c)
         (declare (ignore c))
         (throw 'error "Number required.")))))

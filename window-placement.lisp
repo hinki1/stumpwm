@@ -80,7 +80,7 @@
             (match-properties-or-function
              (or properties-matched (funcall match-properties-or-function w)))
             (match-properties-and-function
-             (and properties-matched (funcall match-properties-or-function w)))
+             (and properties-matched (funcall match-properties-and-function w)))
             (t properties-matched)))))
 
 (defun rule-matching-window (window)
@@ -125,7 +125,7 @@
                      (values new-group
                              (if (eq frame :float)
                                  frame
-                                 (frame-by-number group frame))
+                                 (frame-by-number new-group frame))
                              raise)))
                   ((not group-name)
                    (values (current-group)

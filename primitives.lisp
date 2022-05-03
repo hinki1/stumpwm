@@ -29,6 +29,7 @@
           *suppress-frame-indicator*
           *suppress-window-placement-indicator*
           *timeout-wait*
+          *timeout-wait-multiline*
           *timeout-frame-indicator-wait*
           *frame-indicator-text*
           *frame-indicator-timer*
@@ -42,6 +43,7 @@
           *destroy-window-hook*
           *focus-window-hook*
           *place-window-hook*
+          *pre-thread-hook*
           *start-hook*
           *restart-hook*
           *quit-hook*
@@ -196,6 +198,10 @@
   "Specifies, in seconds, how long a message will appear for. This must
 be an integer.")
 
+(defvar *timeout-wait-multiline* nil
+  "Specifies, in seconds, how long a message will more than one line will
+appear for. This must be an integer. If falsy, default to *timeout-wait*.")
+
 (defvar *timeout-frame-indicator-wait* 1
   "The amount of time a frame indicator timeout takes.")
 
@@ -270,6 +276,9 @@ arguments: the current window and the last window (could be nil).")
 (defvar *place-window-hook* '()
   "A hook called whenever a window is placed by rule. Arguments are
 window group and frame")
+
+(defvar *pre-thread-hook* '()
+  "A hook called before any threads are started. Useful if you need to fork.")
 
 (defvar *start-hook* '()
   "A hook called when stumpwm starts.")
@@ -383,6 +392,9 @@ with 1 argument: the menu.")
 
 (defvar *text-color* "white"
   "The color of message text.")
+
+(defvar *draw-in-color* t
+  "When NIL color formatters are ignored.")
 
 (defvar *menu-maximum-height* nil
   "Defines the maxium number of lines to display in the menu before enabling
@@ -523,6 +535,7 @@ are valid values.
 (defvar *maxsize-gravity* :center)
 (defvar *transient-gravity* :center)
 
+(declaim (type (member :message :break :abort) *top-level-error-action*))
 (defvar *top-level-error-action* :abort
   "If an error is encountered at the top level, in
 STUMPWM-INTERNAL-LOOP, then this variable decides what action
@@ -1147,11 +1160,13 @@ The windows title must not match @var{title-not}.
 
 @item match-properties-and-function
 A function that, if provided, must return true alongside the provided properties
-in order for the rule to match. This function takes one argument, the window.
+in order for the rule to match. This function takes one argument, the window. 
+Must be an unquoted symbol to be looked up at runtime. 
 
 @item match-properties-or-function
 A function that, if provided and returning true, will cause the rule to match
 regardless of whether the window properties match. Takes one argument, the window.
+Must be an unquoted symbol to be looked up at runtime. 
 @end table"
   (let ((x (gensym "X")))
     `(dolist (,x ',frame-rules)
@@ -1169,7 +1184,10 @@ regardless of whether the window properties match. Takes one argument, the windo
 focus. Possible values are :ignore, :sloppy, and :click. :ignore means
 stumpwm ignores the mouse. :sloppy means input focus follows the
 mouse; the window that the mouse is in gets the focus. :click means
-input focus is transfered to the window you click on.")
+input focus is transfered to the window you click on.
+
+If *MOUSE-FOCUS-POLICY* holds any value other than those listed above,
+mouse focus will behave as though it contains :IGNORE")
 
 (defvar *root-click-focuses-frame* t
   "Set to NIL if you don't want clicking the root window to focus the frame

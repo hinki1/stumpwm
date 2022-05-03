@@ -124,6 +124,7 @@ Basic Concepts
 * Screens and Heads::
 * Group Basics::
 * Floating Group Basics::
+* Dynamic Group Basics::
 * Frame Basics::
 * Window Basics::
 * System Trays and the Mode Line::
@@ -306,6 +307,7 @@ An introduction to some of the basic concepts used by StumpWM.
 * Screens and Heads::
 * Group Basics::
 * Floating Group Basics::
+* Dynamic Group Basics::
 * Frame Basics::
 * Window Basics::
 * System Trays and the Mode Line::
@@ -348,7 +350,7 @@ groups, all monitors switch to that group.
 
 Each group contains an ordered list of frames.
 
-@node Floating Group Basics, Frame Basics, Group Basics, Basic Concepts
+@node Floating Group Basics, Dynamic Group Basics, Group Basics, Basic Concepts
 @subsection Floating Group Basics
 Within a floating group, windows behave more like they do in traditional
 window managers: rather than being arranged into frames, they each have
@@ -368,6 +370,41 @@ Most of the window-switching commands listed below do not function in
 a floating group. You're restricted to `other', the `select-window-*'
 commands, and `windowlist'.
 
+
+@node Dynamic Group Basics, Frame Basics, Floating Group Basics, Basic Concepts
+@subsection Dynamic Group Basics
+Within a dynamic group, windows are organized into a @dfn{master window} and a
+@dfn{window stack}, with one of each per head. When a new window is added to a
+head within a dynamic group, that heads master window is pushed onto that heads
+window stack, and the new window becomes the master window. When a head becomes
+to full (ie more windows cannot be placed upon the stack) a overflow policy is
+used to determine which window to move to a separate head or group. 
+
+!!! gnew-dynamic
+
+!!! gnewbg-dynamic
+
+!!! rotate-windows
+
+!!! change-layout
+
+!!! change-default-layout
+
+!!! change-split-ratio
+
+!!! change-default-split-ratio
+
+!!! retile
+
+!!! select-floating-window
+
+### *rotation-focus-policy*
+
+When defining commands, anything restricted to tiling groups will also be
+active in dynamic groups. To fully restrict it to tiling groups, call the
+function dyn-blacklist-command on the command in question.
+
+
 @node Frame Basics, Window Basics, Floating Group Basics, Basic Concepts
 @subsection Frame Basics
 Frames are the boxes within which windows are displayed. StumpWM
@@ -378,13 +415,12 @@ These frames can be further split, creating nested boxes.
 
 Technically speaking, frames live within a ``frame tree''. When you
 split a frame, the command actually creates @emph{two} new frames
-side-by-side within the original parent frame. This makes no practical
-difference, unless you use the `sibling' command, which will move to
-the other child frame within the parent frame.
+side-by-side within the original parent frame. This has implications for
+the behaviour of many commands that interact with frames.
 
 Within this frame tree model, all frames either contain other frames,
-or windows. The command `fclear' will hide all a frame's windows and
-show the background.
+or contain windows, or are empty. The command `fclear' will hide all of a
+frame's windows and show the background.
 
 @node Window Basics, System Trays and the Mode Line, Frame Basics, Basic Concepts
 @subsection Window Basics
@@ -636,7 +672,7 @@ order:
 standardized environment.
 @end itemize
 
-StumpWM includes a basic `sample-stumpwm.lisp' in its source
+StumpWM includes a basic `sample-stumpwmrc.lisp' in its source
 directory. You can use this as a template when you're starting out:
 copy it to the above name and location you prefer and edit it to
 suit your preferences.
@@ -659,7 +695,7 @@ a bug report or patch, please open an issue or pull request at
 @url{https://github.com/stumpwm/stumpwm/issues}.
 
 The StumpWM IRC channel can be found on Freenode at
-@uref{irc://irc.freenode.net/#stumpwm, @code{#stumpwm}}.
+@uref{irc://irc.libera.chat/#stumpwm, @code{#stumpwm}}.
 
 @node Key Bindings, Commands, Introduction, Top
 @chapter Key Bindings
@@ -782,7 +818,7 @@ input should be valid Common Lisp.
 
 @item C-t C-h
 @itemx C-t ?
-The help.
+The help. These can be customized using the @var{*help-keys*} variable.
 
 @item C-t -
 Hide all frames and show the root window.
@@ -893,6 +929,7 @@ Describe the specified command.
 ### *groups-map*
 ### *group-top-maps*
 ### *exchange-window-map*
+### *key-seq-color*
 
 !!! bind
 !!! unbind
@@ -1230,10 +1267,10 @@ above, but if it isn't, the user will not be prompted, and the argument
 will be bound to nil.
 
 It is possible to limit the scope under which the command will
-be usable: a command can be defined to work only in tile groups, or only
-in floating groups (the only two types of groups that currently exist).
-This is done by replacing the name of the command with a two-element
-list: the name of the command as a symbol, and either the symbol
+be usable: a command can be defined to work only a specific group type;
+the three currently implemented are tile groups,f loating groups, and
+dynamic groups. This is done by replacing the name of the command with a
+two-element list: the name of the command as a symbol, and either the symbol
 tile-group or floating-group. For instance, the @command{next} command,
 which only functions in tile groups, is defined this way:
 
@@ -1479,6 +1516,7 @@ return a ``nil'' value in those cases, and let the command handle that.
 @@@ wrap
 ### *message-max-width*
 ### *help-max-height*
+### *which-key-format*
 !!! colon
 
 %%% with-restarts-menu
@@ -1509,6 +1547,7 @@ set these color variables.
 ### *message-window-input-gravity*
 ### *message-window-timer*
 ### *timeout-wait*
+### *timeout-wait-multiline*
 ### *input-window-gravity*
 
 @node Using The Input Bar, Programming The Message Bar, Customizing The Bar, Message and Input Bar
@@ -1807,7 +1846,9 @@ window pool, where windows and frames are not so tightly connected.
 !!! hsplit
 !!! vsplit
 !!! hsplit-equally
+!!! vsplit-uniformly
 !!! vsplit-equally
+!!! hsplit-uniformly
 !!! remove-split
 !!! only
 !!! curframe
@@ -1986,8 +2027,10 @@ Groups in StumpWM are more commonly known as @dfn{virtual desktops} or
 
 !!! gnew
 !!! gnew-float
-!!! gnewbg-float
+!!! gnew-dynamic
 !!! gnewbg
+!!! gnewbg-float
+!!! gnewbg-dynamic
 !!! gnext
 !!! gprev
 !!! gnext-with-window
@@ -2403,6 +2446,7 @@ Return T if TIMER is a timer structure.
 @@@ lookup-command
 
 ### *help-map*
+### *help-keys*
 
 @node Colors, Hooks, Miscellaneous Commands, Top
 @chapter Colors
@@ -3017,6 +3061,7 @@ sending them as one.
 ### *suppress-frame-indicator*
 ### *suppress-window-placement-indicator*
 ### *text-color*
+### *draw-in-color*
 ### *timeout-frame-indicator-wait*
 ### *top-level-error-action*
 

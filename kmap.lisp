@@ -26,6 +26,7 @@
 
 (export '(*top-map*
           *root-map*
+          *key-seq-color*
           define-key
           kbd
           lookup-command
@@ -39,8 +40,12 @@
 
 (defvar *root-map* nil
   "This is the keymap by default bound to @kbd{C-t} (along with 
- *group-root-map* and either *tile-group-root-map* or 
- *float-group-root-map*). It is known as the @dfn{prefix map}.")
+ *group-root-map* and either *tile-group-root-map*, *float-group-root-map*,
+ or *dynamic-group-map*). It is known as the @dfn{prefix map}.")
+
+(defvar *key-seq-color* "^5"
+  "Color of a keybinding when displayed in windows such as the prefix
+keybinding in the which-key window.")
 
 (defstruct key
   keysym shift control meta alt hyper super)
@@ -177,12 +182,14 @@ others."
           (keysym->stumpwm-name (key-keysym key))))
 
 (defun print-key-seq (seq)
-  (format nil "^5*~{~a~^ ~}^n" (mapcar 'print-key seq)))
+  (format nil
+          (concat *key-seq-color* "*~{~a~^ ~}^n")
+          (mapcar 'print-key seq)))
 
 (defun define-key (map key command)
   "Add a keybinding mapping for the key, @var{key}, to the command,
 @var{command}, in the specified keymap. If @var{command} is nil, remove an
-exising binding.  For example,
+existing binding.  For example,
 
 @example
 \(stumpwm:define-key stumpwm:*root-map* (stumpwm:kbd \"C-z\") \"echo Zzzzz...\")

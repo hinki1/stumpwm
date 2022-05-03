@@ -195,7 +195,7 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
                     (screen-color-map-bright screen)
                     (screen-color-map-normal screen))
                 color))
-        (t (first (multiple-value-list (alloc-color screen color))))))
+        (t (nth-value 0 (alloc-color screen color)))))
 
 (defun find-font (cc specified-font &aux (font (or specified-font 0)))
   (if (integerp font)
@@ -203,6 +203,11 @@ If COLOR isn't a colorcode a list containing COLOR is returned."
       font))
 
 (defgeneric apply-color (ccontext modifier &rest arguments))
+
+(defmethod apply-color :around ((cc ccontext) modifier &rest arguments)
+  (declare (ignorable ccontext modifier arguments))
+  (when *draw-in-color*
+    (call-next-method)))
 
 (defmethod apply-color ((cc ccontext) (modifier (eql :fg)) &rest args)
   (setf (ccontext-fg cc) (first args))

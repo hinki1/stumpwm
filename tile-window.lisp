@@ -16,8 +16,7 @@ like xterm and emacs.")
   ;; give it a colored border but only if there are more than 1 frames.
   (let* ((group (window-group window))
          (screen (group-screen group)))
-    (let ((c (if (and (> (length (group-frames group)) 1)
-                      (eq (group-current-window group) window))
+    (let ((c (if (eq (group-current-window group) window)
                  (screen-focus-color screen)
                  (screen-unfocus-color screen))))
       (setf (xlib:window-border (window-parent window)) c
@@ -86,7 +85,10 @@ than the root window's width and height."
   (let* ((f (window-frame win))
          (x (frame-x f))
          (y (frame-display-y (window-group win) f))
-         (border (xlib:drawable-border-width (window-parent win)))
+         (border (if (or (eq *window-border-style* :none)
+                         (= (length (group-frames (window-group win))) 1))
+                     0
+                   (default-border-width-for-type win)))
          (fwidth (- (frame-width f) (* 2 border)))
          (fheight (- (frame-display-height (window-group win) f)
                      (* 2 border)))
@@ -105,9 +107,6 @@ than the root window's width and height."
          (hints-inc-y (and hints (xlib:wm-size-hints-height-inc hints)))
          (hints-min-aspect (and hints (xlib:wm-size-hints-min-aspect hints)))
          (hints-max-aspect (and hints (xlib:wm-size-hints-max-aspect hints)))
-         (border (case *window-border-style*
-                   (:none 0)
-                   (t (default-border-width-for-type win))))
          center)
     ;;    (dformat 4 "hints: ~s~%" hints)
     ;; determine what the width and height should be
@@ -119,10 +118,7 @@ than the root window's width and height."
          (setf x (frame-x head)
                y (frame-y head)
                width (frame-width head)
-               height (frame-height head)
-               (xlib:window-priority (window-parent win)
-                                     (window-parent (group-raised-window win-group))) :above
-               (group-raised-window (window-group win)) win))
+               height (frame-height head)))
        (return-from geometry-hints (values x y 0 0 width height 0 t)))
       ;; Adjust the defaults if the window is a transient_for window.
       ((find (window-type win) '(:transient :dialog))
@@ -215,6 +211,7 @@ than the root window's width and height."
                                   wy
                                   (- (xlib:drawable-height (window-parent win)) height wy))
                             :cardinal 32))
+    (update-decoration win)
     (update-configuration win)))
 
 ;;;
@@ -329,8 +326,11 @@ when selecting another window."
     (when pulled-window
       (pull-window pulled-window))))
 
-(defun exchange-windows (win1 win2)
-  "Exchange the windows in their respective frames."
+(defgeneric exchange-windows (win1 win2)
+  (:documentation "Exchange the windows in their respective frames."))
+
+(defmethod exchange-windows ((win1 tile-window) (win2 tile-window))
+  "Exchange tile windows in their respective frames."
   (let ((f1 (window-frame win1))
         (f2 (window-frame win2)))
     (unless (eq f1 f2)
@@ -456,11 +456,10 @@ frame. Possible values are:
                                                 (window-height-inc window)))))
       (maximize-window window)))))
 
-(defcommand (unmaximize tile-group) () ()
+(defcommand (unmaximize tile-group) (&optional (window (current-window))) (:rest)
   "Use the size the program requested for current window (if any) instead of maximizing it."
-  (let* ((window (current-window))
-         (status (not (window-normal-size window)))
-         (hints (window-normal-hints window)))
+  (let ((status (not (window-normal-size window)))
+        (hints (window-normal-hints window)))
     (if (and (xlib:wm-size-hints-width hints)
              (xlib:wm-size-hints-height hints))
         (progn

@@ -24,6 +24,7 @@
 (in-package :stumpwm)
 
 (export '(*input-history-ignore-duplicates*
+          *input-candidate-selected-hook*
           *input-completion-style*
           *input-map*
           *numpad-map*
@@ -33,6 +34,8 @@
           input-insert-char
           input-insert-string
           input-point
+          input-refine-prefix
+          input-refine-regexp
           input-substring
           input-validate-region
           read-one-char
@@ -122,6 +125,23 @@ and complete the input by mutating it."))
   (make-instance 'input-completion-style-unambiguous
                  :display-limit display-limit))
 
+(defun input-refine-prefix (str candidates)
+  (remove-if-not (lambda (elt)
+                   (when (listp elt)
+                     (setf elt (car elt)))
+                   (and (<= (length str) (length elt))
+                        (string= str elt
+                                 :end1 (length str)
+                                 :end2 (length str))))
+                 candidates))
+
+(defun input-refine-regexp (str candidates)
+  (remove-if-not (lambda (elt)
+                   (when (listp elt)
+                     (setf elt (car elt)))
+                   (match-all-regexps str elt))
+                 candidates))
+
 (defvar *input-map*
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "DEL") 'input-delete-backward-char)
@@ -169,6 +189,11 @@ and complete the input by mutating it."))
 (defvar *input-completions* nil
   "The list of completions")
 
+(defvar *input-refine-candidates-fn* #'input-refine-prefix
+  "A function used to filter completions based on input. The function receives
+two arguments: the input string and a list of completions. The function should
+return a list of completions, possibly filtered and/or sorted.")
+
 (defvar *input-completion-style* (make-input-completion-style-cyclic)
   "The completion style to use.
 A completion style has to implement input-completion-reset
@@ -178,6 +203,9 @@ Available completion styles include
 @item make-input-completion-style-cyclic
 @item make-input-completion-style-unambiguous
 @end table")
+
+(defvar *input-completion-show-empty* nil
+  "If t, show completion candidates even if the input is empty.")
 
 (defvar *input-history-ignore-duplicates* nil
   "Do not add a command to the input history if it's already the first in the list.")
@@ -317,6 +345,7 @@ match with an element of the completions."
                              :require-match require-match)))
     (when line (string-trim " " line))))
 
+(defvar *input-candidate-selected-hook* nil)
 (defun read-one-line (screen prompt &key completions (initial-input "") require-match password)
   "Read a line of input through stumpwm and return it. Returns nil if the user aborted."
   (let ((*input-last-command* nil)
@@ -354,7 +383,10 @@ match with an element of the completions."
       (draw-input-bucket screen prompt input)
       (setup-input-window screen prompt input)
       (catch :abort
-        (unwind-protect (key-loop)
+        (unwind-protect
+             (let ((input (key-loop)))
+               (run-hook-with-args *input-candidate-selected-hook* input)
+               input)
           (shutdown-input-window screen))))))
 
 (defun read-one-char (screen)
@@ -380,19 +412,10 @@ match with an element of the completions."
 
 
 (defun get-completion-preview-list (input-line all-completions)
-  (if (string= "" input-line)
+  (if (and (string= "" input-line) (not *input-completion-show-empty*))
       '()
       (multiple-value-bind (completions more)
-          (take *maximum-completions*
-                (remove-duplicates
-                  (remove-if
-                    (lambda (str)
-                      (or (string= str "")
-                          (< (length str) (length input-line))
-                          (string/= input-line
-                                    (subseq str 0 (length input-line)))))
-                    all-completions)
-                  :test #'string=))
+          (take *maximum-completions* (input-find-completions input-line all-completions))
         (if more
             (append (butlast completions)
                     (list (format nil "... and ~D more" (1+ (length more)))))
@@ -597,18 +620,14 @@ functions are passed this structure as their first argument."
 ;;; "interactive" input functions
 
 (defun input-find-completions (str completions)
-  (if (or (functionp completions)
-          (and (symbolp completions)
-               (fboundp completions)))
-      (funcall completions str)
-      (remove-if-not (lambda (elt)
-                       (when (listp elt)
-                         (setf elt (car elt)))
-                       (and (<= (length str) (length elt))
-                            (string= str elt
-                                     :end1 (length str)
-                                     :end2 (length str))))
-                     completions)))
+  (let ((candidates (if (or (functionp completions)
+                            (and (symbolp completions)
+                                 (fboundp completions)))
+                        (funcall completions str)
+                        completions)))
+    (remove-duplicates
+     (funcall *input-refine-candidates-fn* str candidates)
+     :test #'equal)))
 
 (defun input-complete (input direction)
   (unless (find *input-last-command* '(input-complete-forward
@@ -869,8 +888,8 @@ input (pressing Return), nil otherwise."
   "Ask a \"y or n\" question on the current screen and return T if the
 user presses 'y'."
   (message "~a(y or n) " message)
-  (char= (read-one-char (current-screen))
-        #\y))
+  (eql (read-one-char (current-screen))
+       #\y))
 
 (defun yes-or-no-p (message)
   "ask a \"yes or no\" question on the current screen and return T if the

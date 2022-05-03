@@ -18,6 +18,9 @@
   and :NUMLOCK.")
 
 
+(defun float-window-p (window)
+  (typep window 'float-window))
+
 (defun float-window-modifier ()
   "Convert the *FLOAT-WINDOW-MODIFIER* to its corresponding X11."
   (when-let ((fn (find-symbol (concat "MODIFIERS-" (symbol-name *float-window-modifier*))
@@ -79,9 +82,9 @@
         (heads (screen-heads (group-screen (window-group window)))))
     (flet ((within-frame-p (y x head)
              (and (>= x (frame-x head))
-                  (< x (+ (frame-x head) (frame-width head)))
+                  (< x (+ (frame-x head) (1- (frame-width head))))
                   (>= y (frame-y head))
-                  (< y (+ (frame-y head) (frame-height head))))))
+                  (< y (+ (frame-y head) (1- (frame-height head)))))))
       (or (find-if (lambda (head)
                      (or (within-frame-p top left head)
                          (within-frame-p top right head)
@@ -138,19 +141,21 @@
 
 (defmethod group-startup ((group float-group)))
 
-(flet ((add-float-window (group window)
+(flet ((add-float-window (group window raise)
          (change-class window 'float-window)
          (float-window-align window)
-         (group-focus-window group window)))
-  (defmethod group-add-window ((group float-group) window &key &allow-other-keys)
-    (add-float-window group window))
-  (defmethod group-add-window (group (window float-window) &key &allow-other-keys)
-    (add-float-window group window)))
+         (when raise
+           (group-focus-window group window))))
+  (defmethod group-add-window ((group float-group) window &key raise &allow-other-keys)
+    (add-float-window group window raise))
+  (defmethod group-add-window (group (window float-window) &key raise &allow-other-keys)
+    (add-float-window group window raise)))
 
 (defun %float-focus-next (group)
-  (if (group-windows group)
-      (group-focus-window group (first (group-windows group)))
-      (no-focus group nil)))
+  (let ((windows (remove-if 'window-hidden-p (group-windows group))))
+    (if windows
+        (group-focus-window group (first windows))
+        (no-focus group nil))))
 
 (defmethod group-delete-window ((group float-group) (window float-window))
   (declare (ignore window))
@@ -245,7 +250,7 @@
        (* 2 *normal-border-width*)
        *float-window-border*
        *float-window-title-height*)))
-  
+
 (defun maximize-float (window &key horizontal vertical)
   (let* ((head (window-head window))
          (ml (head-mode-line head))
@@ -256,7 +261,7 @@
                (* 2 *float-window-border*)))
          (h (window-display-height window)))
     (when horizontal
-      (float-window-move-resize window :width w)) 
+      (float-window-move-resize window :width w))
     (when vertical
       (float-window-move-resize window :y hy :height h))
     (when (and horizontal vertical)
@@ -272,7 +277,7 @@
         (xwin (window-xwin window)))
     (when (member *mouse-focus-policy* '(:click :sloppy))
       (group-focus-window group window))
-    
+
     ;; When in border
     (multiple-value-bind (relx rely same-screen-p child state-mask)
         (xlib:query-pointer (window-parent window))
@@ -292,12 +297,12 @@
                  (win-focused-p (eq window (screen-focus screen))))
             (setf *last-click-time* current-time)
             (when (< delta-t 0.25)
-              (cond ((and (not (eq (window-height window) 
-                                   (window-display-height window))) 
-                          win-focused-p) 
+              (cond ((and (not (eq (window-height window)
+                                   (window-display-height window)))
+                          win-focused-p)
                      (maximize-float window :vertical t))
                     (win-focused-p (maximize-float window :vertical t :horizontal t))
-                    (t (focus-window window t))))))  
+                    (t (focus-window window t))))))
 
         (multiple-value-bind (relx rely same-screen-p child state-mask)
             (xlib:query-pointer (window-parent window))
@@ -390,13 +395,20 @@
 
 ;;; Bindings
 
-(pushnew '(float-group *float-group-top-map*) *group-top-maps*)
-(defvar *float-group-top-map* (make-sparse-keymap))
-(defvar *float-group-root-map* (make-sparse-keymap)
+(defvar *float-group-top-map* nil)
+(defvar *float-group-root-map* nil
   "Commands specific to a floating group context hang from this keymap.
 It is available as part of the @dnf{prefix map} when the active group
-is a tile group.")
+is a float group.")
 
+(fill-keymap *float-group-top-map*
+  *escape-key* '*float-group-root-map*)
+
+(fill-keymap *float-group-root-map*
+  (kbd "n")  "next"
+  (kbd "p")  "prev")
+
+(pushnew '(float-group *float-group-top-map*) *group-top-maps*)
 
 (defcommand gnew-float (name) ((:rest "Group Name: "))
   "Create a floating window group with the specified name and switch to it."
