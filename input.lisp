@@ -263,7 +263,8 @@ Available completion styles include
       ""))
 
 (defun input-handle-click-event (&key root-x root-y &allow-other-keys)
-  (list :button-press root-x root-y))
+  (list :button-press root-x root-y)
+  (message "click ~a ~a", root-x, root-y))
 
 (defun read-key-handle-event (&rest event-slots &key event-key &allow-other-keys)
   (case event-key
