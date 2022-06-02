@@ -64,9 +64,9 @@
     (#\B time-month-name)
     (#\c time-date-and-time)
     (#\C time-century)
-    (#\d time-day-of-month)
+    (#\d time-day-of-month-zero)
     (#\D time-date)
-    (#\e time-day-of-month-zero)
+    (#\e time-day-of-month-space)
     (#\F time-date-full)
     ;; (#\g)   last two digits of year of ISO week number (see %G)
     ;; (#\G)   year of ISO week  number (see %V); normally useful only with %V
@@ -158,7 +158,7 @@ run this command to make StumpWM notice the change."
 (defun time-day-of-month-zero ()
   (format nil "~2,'0D" (getf (time-plist) :dom)))
 
-(defun time-day-of-month ()
+(defun time-day-of-month-space ()
   (format nil "~2,' D" (getf (time-plist) :dom)))
 
 (defun time-month ()
