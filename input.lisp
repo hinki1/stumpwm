@@ -25,6 +25,7 @@
 
 (export '(*input-history-ignore-duplicates*
           *input-candidate-selected-hook*
+          *input-refine-candidates-fn*
           *input-completion-style*
           *input-map*
           *numpad-map*
@@ -36,6 +37,7 @@
           input-insert-string
           input-point
           input-refine-prefix
+          input-refine-fuzzy
           input-refine-regexp
           input-substring
           input-validate-region
@@ -134,6 +136,16 @@ and complete the input by mutating it."))
                         (string= str elt
                                  :end1 (length str)
                                  :end2 (length str))))
+                 candidates))
+
+(defun input-refine-fuzzy (str candidates)
+  (remove-if-not (lambda (elt)
+                   (when (listp elt)
+                     (setf elt (car elt)))
+                   (and (<= (length str) (length elt))
+                        (every (lambda (part)
+                                 (search part elt))
+                               (uiop:split-string str))))
                  candidates))
 
 (defun input-refine-regexp (str candidates)
