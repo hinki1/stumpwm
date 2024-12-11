@@ -7,7 +7,7 @@
 (defsystem :stumpwm
   :name "StumpWM"
   :author "Shawn Betts <sabetts@vcn.bc.ca>"
-  :version "1.0.1"
+  :version "23.11"
   :maintainer "David Bjergaard <dbjergaard@gmail.com>"
   ;; :license "GNU General Public License"
   :description "A tiling, keyboard driven window manager"
@@ -17,7 +17,7 @@
                #:clx
                #:sb-posix
                #:sb-introspect
-               #:dynamic-mixins)
+               #:dynamic-mixins-swm)
   :components ((:file "package")
                (:file "debug")
                (:file "primitives")
@@ -67,7 +67,7 @@
                ;; keep this last so it always gets recompiled if
                ;; anything changes
                (:file "version"))
-  :in-order-to ((test-op (test-op "stumpwm-tests"))))
+  :in-order-to ((test-op (test-op "stumpwm/tests"))))
 
 (defsystem "stumpwm/build"
   :depends-on ("stumpwm")
@@ -76,6 +76,18 @@
   :entry-point "stumpwm:main"
   :components ((:file "main")))
 
-;;; Explicitly load the vendored dynamic mixins asd file
-(asdf:load-asd
- (asdf:system-relative-pathname "stumpwm" "dynamic-mixins/dynamic-mixins.asd"))
+(defsystem "stumpwm/tests"
+  :name "StumpWM tests"
+  :serial t
+  :depends-on ("stumpwm"
+               "fiasco")
+  :pathname "tests/"
+  :components ((:file "package")
+               (:file "kmap")
+               (:file "pathnames")
+               (:file "mode-line-formatters"))
+  :perform (test-op (o c)
+             (uiop/package:symbol-call "FIASCO" "RUN-TESTS" 'stumpwm-tests)))
+
+;; Quicklisp prefers systems in the central registry over its own systems
+(push (asdf:system-relative-pathname "stumpwm" "dynamic-mixins/") asdf:*central-registry*)

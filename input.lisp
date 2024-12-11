@@ -25,6 +25,7 @@
 
 (export '(*input-history-ignore-duplicates*
           *input-candidate-selected-hook*
+          *input-refine-candidates-fn*
           *input-completion-style*
           *input-map*
           *numpad-map*
@@ -36,6 +37,7 @@
           input-insert-string
           input-point
           input-refine-prefix
+          input-refine-fuzzy
           input-refine-regexp
           input-substring
           input-validate-region
@@ -136,6 +138,16 @@ and complete the input by mutating it."))
                                  :end2 (length str))))
                  candidates))
 
+(defun input-refine-fuzzy (str candidates)
+  (remove-if-not (lambda (elt)
+                   (when (listp elt)
+                     (setf elt (car elt)))
+                   (and (<= (length str) (length elt))
+                        (every (lambda (part)
+                                 (search part elt))
+                               (uiop:split-string str))))
+                 candidates))
+
 (defun input-refine-regexp (str candidates)
   (remove-if-not (lambda (elt)
                    (when (listp elt)
@@ -146,7 +158,9 @@ and complete the input by mutating it."))
 (defvar *input-map*
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "DEL") 'input-delete-backward-char)
+    (define-key map (kbd "S-DEL") 'input-delete-backward-char)
     (define-key map (kbd "M-DEL") 'input-backward-kill-word)
+    (define-key map (kbd "C-DEL") 'input-backward-kill-word)
     (define-key map (kbd "C-d") 'input-delete-forward-char)
     (define-key map (kbd "M-d") 'input-forward-kill-word)
     (define-key map (kbd "Delete") 'input-delete-forward-char)
@@ -171,7 +185,9 @@ and complete the input by mutating it."))
     (define-key map (kbd "ESC") 'input-abort)
     (define-key map (kbd "C-y") 'input-yank-selection)
     (define-key map (kbd "C-Y") 'input-yank-clipboard)
+    (define-key map (kbd "C-v") 'input-yank-clipboard)
     (define-key map (kbd "TAB") 'input-complete-forward)
+    (define-key map (kbd "C-i") 'input-complete-forward)
     (define-key map (kbd "ISO_Left_Tab") 'input-complete-backward)
     (define-key map t 'input-self-insert)
     map)
@@ -347,7 +363,6 @@ passed the substring to complete on and is expected to return a list
 of matches. If require-match argument is non-nil then the input must
 match with an element of the completions."
   (check-type completions (or list function symbol))
-  
   (let ((line (read-one-line screen prompt
                              :completions completions
                              :initial-input initial-input

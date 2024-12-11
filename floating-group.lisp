@@ -150,7 +150,7 @@
 (defmethod group-startup ((group float-group)))
 
 (flet ((add-float-window (group window raise)
-         (dynamic-mixins:replace-class window 'float-window)
+         (dynamic-mixins-swm:replace-class window 'float-window)
          ;; (change-class window 'float-window)
          (float-window-align window)
          (sync-minor-modes window)
@@ -257,8 +257,9 @@
 (defmethod group-adopt-orphaned-windows ((group float-group) &optional (screen (current-screen)))
   (let ((orphaned-frames (orphaned-frames screen)))
     (loop for window in (list-windows screen)
-          when (member (window-frame window) orphaned-frames)
-          do (group-add-window group window))))
+          when (and (not (float-window-p window))
+                    (member (window-frame window) orphaned-frames))
+            do (group-add-window group window))))
 
 (defvar *last-click-time* 0
   "Time since the last click occurred")

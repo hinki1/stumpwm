@@ -1,13 +1,14 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.59)
-AC_INIT(Stump Window Manager, esyscmd(grep :version stumpwm.asd | cut -d\" -f2 | tr -d \\n), dbjergaard@gmail.com)
+AC_PREREQ([2.59])
+AC_INIT([Stump Window Manager],esyscmd(grep :version stumpwm.asd | cut -d\" -f2 | tr -d \\n),[dbjergaard@gmail.com])
 
 AC_SUBST(MODULE_DIR)
 AC_SUBST(LISP_PROGRAM)
 AC_SUBST(LISP)
 AC_SUBST(COMPRESSION)
+AC_SUBST(REPRODUCIBLE)
 AC_SUBST(STUMPWM_ASDF_DIR)
 
 # Checks for programs.
@@ -21,6 +22,11 @@ AC_ARG_ENABLE(compression,
               [  --enable-compression    use SBCL's core compression feature if available],
               COMPRESSION="t",
               COMPRESSION="nil")
+
+AC_ARG_ENABLE(reproducible,
+              [  --enable-reproducible   create a reproducible build (doesn't include compilation date and time)],
+              REPRODUCIBLE="t",
+              REPRODUCIBLE="nil")
 
 STUMPWM_ASDF_DIR="`pwd`"
 
@@ -57,6 +63,9 @@ to build the manuals. Please install makeinfo for the manual.])
 fi
 
 AC_SUBST([MAKEINFO])
-AC_OUTPUT(Makefile)
-AC_OUTPUT(make-image.lisp)
-AC_OUTPUT(load-stumpwm.lisp)
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
+AC_CONFIG_FILES([make-image.lisp])
+AC_OUTPUT
+AC_CONFIG_FILES([load-stumpwm.lisp])
+AC_OUTPUT

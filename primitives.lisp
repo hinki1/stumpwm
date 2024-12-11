@@ -75,6 +75,8 @@
           *window-parent-events*
           *message-window-padding*
           *message-window-y-padding*
+          *message-window-margin*
+          *message-window-y-margin*
           *message-window-gravity*
           *message-window-real-gravity*
           *message-window-input-gravity*
@@ -245,16 +247,15 @@ appear for. This must be an integer. If falsy, default to *timeout-wait*.")
   "The background color of the grabbed pointer.")
 
 ;;; Hooks
-
 (defvar *command-mode-start-hook* '(command-mode-start-message)
-  "A hook called whenever command mode is started")
+  "A hook called whenever command mode is started.")
 
 (defvar *command-mode-end-hook* '(command-mode-end-message)
-  "A hook called whenever command mode is ended")
+  "A hook called whenever command mode is ended.")
 
 (defvar *urgent-window-hook* '()
   "A hook called whenever a window sets the property indicating that
-  it demands the user's attention")
+  it demands the user's attention. Called with the window as an argument.")
 
 (defvar *map-window-hook* '()
   "A hook called whenever a window is mapped.")
@@ -265,10 +266,11 @@ appear for. This must be an integer. If falsy, default to *timeout-wait*.")
 (defvar *new-window-hook* '()
   "A hook called whenever a window is added to the window list. This
 includes a genuinely new window as well as bringing a withdrawn window
-back into the window list.")
+back into the window list. Called with the window as an argument.")
 
 (defvar *destroy-window-hook* '()
-  "A hook called whenever a window is destroyed or withdrawn.")
+  "A hook called whenever a window is destroyed or withdrawn.
+Called with the window as an argument.")
 
 (defvar *focus-window-hook* '()
   "A hook called when a window is given focus. It is called with 2
@@ -276,7 +278,7 @@ arguments: the current window and the last window (could be nil).")
 
 (defvar *place-window-hook* '()
   "A hook called whenever a window is placed by rule. Arguments are
-window group and frame")
+window, group and frame.")
 
 (defvar *pre-thread-hook* '()
   "A hook called before any threads are started. Useful if you need to fork.")
@@ -373,7 +375,6 @@ with 1 argument: the menu.")
 (defvar *new-head-hook* '()
   "A hook called whenever a head is added. It is called with 2 arguments: the
  new head and the current screen.")
-
 ;; Data types and globals used by stumpwm
 
 (defvar *display* nil
@@ -469,6 +470,16 @@ Include only those we are ready to support.")
 
 (defvar *message-window-y-padding* 0
   "The number of pixels that pad the text in the message window vertically.")
+
+(defvar *message-window-margin* 0
+  "The number of pixels (i.e. the gap) between the message window and the
+   horizontal edges of the head. The margin is disregarded if it takes more
+   space than is available.")
+
+(defvar *message-window-y-margin* 0
+  "The number of pixels (i.e. the gap) between the message window and the
+   vertical edges of the head. The margin is disregarded if it takes more
+   space than is available.")
 
 (defvar *message-window-gravity* :top-right
   "This variable controls where the message window appears. The following
@@ -610,8 +621,8 @@ upon the class and replaces it. If SUPERCLASSES is NIL then (SWM-CLASS) is used.
   (unless superclasses (setq superclasses '(swm-class)))
   `(progn
      (defclass ,class-name ,superclasses ,slots ,@options)
-     (defmethod dynamic-mixins:replace-class ((object ,class-name) new &rest r)
-       (apply #'dynamic-mixins:replace-class-in-mixin
+     (defmethod dynamic-mixins-swm:replace-class ((object ,class-name) new &rest r)
+       (apply #'dynamic-mixins-swm:replace-class-in-mixin
               object new ',class-name r))))
 
 (define-swm-class frame ()
@@ -771,7 +782,7 @@ exist, in which case they go into the current group.")
 (defvar *window-number-map* "0123456789"
   "Set this to a string to remap the window numbers to something more convenient.")
 
-(defvar *group-number-map* "1234567890"
+(defvar *group-number-map* "123456789"
   "Set this to a string to remap the group numbers to something more convenient.")
 
 (defvar *frame-number-map* "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -964,44 +975,151 @@ string which is split to obtain the individual regexps. "
 
 ;;; 
 ;;; formatting routines
-(defun format-expand (fmt-alist fmt &rest args)
-  (let* ((chars (coerce fmt 'list))
-         (output "")
-         (cur chars))
-    ;; FIXME: this is horribly inneficient
+
+(declaim (ftype (function (vector list list &key (:element-type (or cons symbol))) vector) replace-ranges))
+(defun replace-ranges (vec ranges replacements &key (element-type (array-element-type vec)))
+  "Return a new vector with all (`START' `END') pairs in @var{`RANGES'} replaced with the corresponding vector in
+the list @var{`REPLACEMENTS'}.
+
+If the keyword argument `ELEMENT-TYPE' is provided, the resulting vector is defined to have elements of that type.
+Ensure all replacement vectors are of compatible type or it will error, as it trusts this blindly.
+Otherwise, it uses the element type of `VEC' - to use replacements with arbitrary element types,
+set `ELEMENT-TYPE' to T.
+
+The lengths of the replacements do not matter, and only a single non-resizeable vector will
+be created for the result.
+
+Example using strings:
+@samp{(replace-ranges \"This is a test string with replacements.\"
+'((0 0) (10 14) (27 40))
+'(\"(Hi) \" \"simple\" \"three replaced sections.\"))} =>
+\"(Hi!) This is a simple string with three replaced sections.\"
+
+@samp{(replace-ranges \"A vector of characters, also known as a string.\"
+'((12 22) (40 47))
+'(#(\"not\" \"just\" \"one element type\")
+\"simple-vector.\") :element-type T)} =>
+#(#\A #\  #\v #\e #\c #\t #\o #\r #\  #\o #\f #\  \"not\" \"just\" \"one element type\" #\, #\
+#\a #\l #\s #\o #\  #\k #\n #\o #\w #\n #\  #\a #\s #\  #\a #\
+#\s #\i #\m #\p #\l #\e #\- #\v #\e #\c #\t #\o #\r #\.)"
+  (let* ((base-len (length vec))
+         (length (+ base-len
+                    (loop for prev-end = 0 then end
+                          for (start end) (integer integer) in ranges
+                          for replacement vector in replacements
+                          do (assert (>= end start prev-end) (start end)
+                                     "Ranges must be in numerical order and not overlap.")
+                          sum (- (length replacement) (- end start))))))
+    (declare (type integer length))
     (loop
-     (cond ((null cur)
-            (return-from format-expand output))
-           ;; if % is the last char in the string then it's a literal.
-           ((and (char= (car cur) #\%)
-                 (cdr cur))
-            (setf cur (cdr cur))
-            (let* ((tmp (loop while (and cur (char<= #\0 (car cur) #\9))
-                              collect (pop cur)))
-                   (len (and tmp (parse-integer (coerce tmp 'string))))
-                   ;; So that eg "%25^t" will trim from the left
-                   (from-left-p (when (char= #\^ (car cur)) (pop cur))))
-              (if (null cur)
-                  (format t "%~a~@[~a~]" len from-left-p)
-                  (let* ((fmt (cadr (assoc (car cur) fmt-alist :test 'char=)))
-                         (str (cond (fmt
-                                     ;; it can return any type, not jut as string.
-                                     (format nil "~a" (apply fmt args)))
-                                    ((char= (car cur) #\%)
-                                     (string #\%))
-                                    (t
-                                     (concatenate 'string (string #\%) (string (car cur)))))))
-                    ;; crop string if needed
-                    (setf output (concatenate 'string output
-                                              (cond ((null len) str)
-                                                    ((not from-left-p) ; Default behavior
-                                                     (subseq str 0 (min len (length str))))
-                                                    ;; New behavior -- trim from the left
-                                                    (t (subseq str (max 0 (- (length str) len)))))))
-                    (setf cur (cdr cur))))))
-           (t
-            (setf output (concatenate 'string output (string (car cur)))
-                  cur (cdr cur)))))))
+      ;; needs previous start as well
+      with composed vector = (make-array length :element-type element-type)
+
+      ;; Offset is to keep indexes synchronized between COMPOSED and STR
+      for offset integer = 0 then (+ offset (- (length replacement) (- end start)))
+      for prev-end integer = 0 then end
+      for (start end) (integer integer) in ranges
+      for replacement vector in replacements
+      ;; Insert text between last replacement up until current, unless there is none
+      unless (zerop (- start prev-end)) do
+        (replace composed vec
+                 :start1 (+ prev-end offset)
+                 :start2 prev-end :end2 start)
+
+      do (replace composed replacement
+                  :start1 (+ start offset))
+         ;; Add end of STR if necessary
+      finally (unless (= prev-end base-len)
+                (replace composed vec
+                         :start1 (+ end offset)
+                         :start2 end))
+              (return composed))))
+
+(defun string-shorten (str &optional trim-count trim-end-p)
+  "Given a vector `STR', returns the string trimmed to length `TRIM-COUNT'. If `TRIM-END-P', trims from the end instead.
+
+Does not trim if `TRIM-COUNT' is nil, and returns the empty string if it is zero."
+  (if trim-count
+      (let ((length (length str)))
+        (cond ((> trim-count length) str)
+              ((zerop trim-count) (copy-seq ""))
+              (trim-end-p (subseq str (- length trim-count)))
+              (t (subseq str 0 trim-count))))
+      str))
+
+(defun format-expand (fmt-alist str &rest args)
+  (let ((length (1- (length str))) (start 0) (end 0)
+        expander-char trim-count trim-end-p)
+    (labels ((read-next-expander ()
+               (when (> length end)
+                 (if-let ((pos (position #\% str :start end :end length :test #'char=)))
+                   (let ((percents (if-let ((end-percents (position #\% str :start (1+ pos) :end (1+ length) :test #'char/=)))
+                                     (- end-percents pos)
+                                     ;; nil means it /didn't/ find a char that wasn't a percent, so it must be percents allll
+                                     ;; the way till the end.
+                                     (1+ (- length pos)))))
+                     ;; If there's more than one expander, just handle escapes and then have the next loop
+                     ;; handle the actual expander itself, if there is one.
+                     (if (= 1 percents)
+                         (let* ((offset-pos (1+ pos))
+                                (next-char (char str offset-pos)))
+                           (let* ((trim-count (when (digit-char-p next-char)
+                                                  ;; Read till length of digits and parse it
+                                                  (let ((end-digits (position-if (complement #'digit-char-p) str :start offset-pos)))
+                                                    (prog1 (parse-integer str :start offset-pos :end end-digits)
+                                                      (incf offset-pos (- end-digits offset-pos))))))
+                                  (trim-end-p (when (char= (char str offset-pos) #\^)
+                                                (incf offset-pos) t)))
+                             ;; length pos is offset (after percents, past padding specifier and ^) + 1 (past expander-char)
+                             (values (char str offset-pos) pos (+ offset-pos 1) trim-count trim-end-p)))
+                         ;; Getting rid of odd part means that, if there's an unescaped percent, it's kept for next iter
+                         (let* ((escapes (floor percents 2))
+                                (end-escapes (+ pos (* escapes 2))))
+                           (values nil pos end-escapes escapes nil)))))))
+
+             (handle-expander ()
+               (if-let ((expander (second (assoc expander-char fmt-alist :test #'char=))))
+                 (string-shorten
+                  (let ((result (apply expander args)))
+                    ;; Original would already produce an error since #'string would fail to convert to string,
+                    ;; so this just adds the ability to handle a list of things uiop:strcat supports: chars, strings, and nil.
+                    ;; If that fails, /then/ you have an error.
+                    (etypecase result
+                      (string result)
+                      (atom (write-to-string result :escape nil))
+                      (list (apply #'uiop:strcat result))))
+                  trim-count trim-end-p)))
+             ;; Separated so it can be run in the initially clause.
+             (update-loop ()
+               (setf (values expander-char start end trim-count trim-end-p)
+                     (read-next-expander))))
+      (loop
+        ;; This can halve runtime is these cases
+        initially
+           (update-loop)
+           (cond ((not (and start end))
+                  (return str)) ; no expanders or escapes found
+                 ((and (zerop start) (= (1- end) length)) ; The string is /only/ an expander
+                  (return (if expander-char
+                              ;; Insert result or leave expander str
+                              ;; "%z" => "%z" when #\z has nothing assigned
+                              (or (handle-expander) str)
+                              ;; It's only percents, return trimmed (escaped)
+                              ;; "%%%%" => "%%"
+                              (string-shorten str trim-count trim-end-p)))))
+           ;; loop start, check before update is to handle the values from initially form
+        if expander-char
+          collect (list start end) into ranges
+        ;; Same as in cond, insert or leave in
+          and collect (or (handle-expander) (subseq str start end)) into replacements
+        else
+          ;; string-replace-ranges will effectively erase unescaped percents, by not bothering adding them.
+          collect (list (+ start trim-count) end) into ranges
+          and collect "" into replacements
+        end
+        do (update-loop)
+        while start ; While there are expanders/escapes, will always be a start pos.
+        finally (return (replace-ranges str ranges replacements :element-type 'character))))))
 
 (defvar *window-formatters* '((#\n window-map-number)
                               (#\s fmt-window-status)
@@ -1216,7 +1334,8 @@ add rules")
 
 (defmacro define-frame-preference (target-group &body frame-rules)
   "Create a rule that matches windows and automatically places them in
-a specified group and frame. Each frame rule is a lambda list:
+a specified group and frame or converts them to floating windows. Each
+frame rule is a lambda list:
 @example
 \(frame-number raise lock &key from-group create restore dump-name class class-not
 instance instance-not type type-not role role-not title title-not
@@ -1229,7 +1348,9 @@ When nil, rule applies in the current group. When non nil, @var{lock} determines
 applicability of rule
 
 @item frame-number
-The frame number to send matching windows to
+The frame number to send matching windows to. If set to :float instead of a
+frame number, the window will be converted to a floating window. This is
+convenient for applications that should be launched as pop-ups.
 
 @item raise
 When non-nil, raise and focus the window in its frame

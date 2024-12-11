@@ -73,14 +73,14 @@
   (cond ((typep window 'float-window)
          (call-next-method))
         ((eq frame :float)
-         (dynamic-mixins:replace-class window 'float-window)
+         (dynamic-mixins-swm:replace-class window 'float-window)
          ;; (change-class-preserving-minor-modes window 'float-window)
          (float-window-align window)
          (sync-minor-modes window)
          (when raise
            (group-focus-window group window)))
         (t
-         (dynamic-mixins:replace-class window 'tile-window)
+         (dynamic-mixins-swm:replace-class window 'tile-window)
          ;; (change-class-preserving-minor-modes window 'tile-window)
          ;; (change-class window 'tile-window)
          ;; Try to put the window in the appropriate frame for the group.
@@ -168,9 +168,15 @@
   (declare (ignore x y))
   (when (typep where 'float-window)
     (call-next-method))
-  (when (member *mouse-focus-policy* '(:click :sloppy))
-    (focus-all where)
-    (unless (scroll-button-keyword-p button)
+  (let ((last-focused (current-window)))
+    (case *mouse-focus-policy*
+      (:sloppy
+        (focus-all where))
+      (:click
+        (unless (scroll-button-keyword-p button)
+          (focus-all where))))
+    (unless (or (scroll-button-keyword-p button)
+                (eq last-focused (current-window)))
       (update-all-mode-lines))))
 
 (defmethod group-root-exposure ((group tile-group))
@@ -181,7 +187,7 @@
     (setf (tile-group-frame-tree group)
           (insert-before (tile-group-frame-tree group)
                          (copy-frame head)
-                         (head-number head)))
+                         (position head (group-heads group))))
     ;; Try to put something in the new frame and give it an unused number
     (let ((frame (tile-group-frame-head group head)))
       (setf (frame-number frame) new-frame-num)
@@ -356,6 +362,7 @@
                (let* ((head-y (frame-y head))
                       (rel-y (- y head-y)))
                  (+ (* rel-y (mode-line-factor ml))
+                    head-y
                     (case (mode-line-position ml)
                       (:top (mode-line-height ml))
                       (:bottom 0))))
@@ -475,7 +482,7 @@ T (default) then also focus the frame."
   "Return a copy of the frame tree."
   (cond ((null tree) tree)
         ((typep tree 'frame)
-         (copy-structure tree))
+         (copy-frame tree))
         (t
          (mapcar #'copy-frame-tree tree))))
 
@@ -487,15 +494,10 @@ T (default) then also focus the frame."
 
 (defun screen-frames (screen)
   "Returns a list of all frames associated with any window in a screen"
-  (remove-duplicates (mapcar #'(lambda (window) (window-frame window))
+  (remove-duplicates (mapcan #'(lambda (window)
+                                 (unless (float-window-p window)
+                                   (list window)))
                              (list-windows screen))))
-
-(defun orphaned-frames (screen)
-  "Returns a list of frames on a screen not associated with any group.
-  These shouldn't exist."
-  (let ((adopted-frames (loop for group in (screen-groups screen)
-                              append (group-frames group))))
-    (set-difference (screen-frames screen) adopted-frames)))
 
 (defmethod group-adopt-orphaned-windows ((group tile-group) &optional (screen (current-screen)))
   "Picks an arbitray frame in the given group and moves
@@ -507,7 +509,8 @@ T (default) then also focus the frame."
   with group-less frames ~A on screen ~A"
              group orphaned-frames screen))
     (loop for window in (list-windows screen)
-          when (member (window-frame window) orphaned-frames)
+          when (and (not (float-window-p window))
+                    (member (window-frame window) orphaned-frames))
           do (setf (window-frame window) foster-frame))))
 
 (defun find-free-frame-number (group)
@@ -561,7 +564,7 @@ T (default) then also focus the frame."
 If ratio is an integer return the number of pixel desired."
   (if (integerp ratio)
       ratio
-      (* length ratio)))
+      (round (* length ratio))))
 
 (defun funcall-on-leaf (tree leaf fn)
   "Return a new tree with LEAF replaced with the result of calling FN on LEAF."
@@ -1099,26 +1102,27 @@ desktop when starting."
   "Draw the number of each frame in its corner. Return the list of
 windows used to draw the numbers in. The caller must destroy them."
   (let ((screen (group-screen group)))
-    (mapcar (lambda (f)
-              (let ((w (xlib:create-window
-                        :parent (screen-root screen)
-                        :x (frame-display-x group f)
-                        :y (frame-display-y group f)
-                        :width 1 :height 1
-                        :background (screen-fg-color screen)
-                        :border (screen-border-color screen)
-                        :border-width 1
-                        :event-mask '())))
-                (xlib:map-window w)
-                (setf (xlib:window-priority w) :above)
-                (echo-in-window w (screen-font screen)
-                                (screen-fg-color screen)
-                                (screen-bg-color screen)
-                                (string (get-frame-number-translation f)))
-                (xlib:display-finish-output *display*)
-                (dformat 3 "mapped ~S~%" (frame-number f))
-                w))
-            (group-frames group))))
+    (prog1
+        (mapcar (lambda (f)
+                  (let ((w (xlib:create-window
+                            :parent (screen-root screen)
+                            :x (frame-display-x group f)
+                            :y (frame-display-y group f)
+                            :width 1 :height 1
+                            :background (screen-fg-color screen)
+                            :border (screen-border-color screen)
+                            :border-width 1
+                            :event-mask '())))
+                    (xlib:map-window w)
+                    (setf (xlib:window-priority w) :above)
+                    (echo-in-window w (screen-font screen)
+                                    (screen-fg-color screen)
+                                    (screen-bg-color screen)
+                                    (string (get-frame-number-translation f)))
+                    (dformat 3 "mapped ~S~%" (frame-number f))
+                    w))
+                (group-frames group))
+      (xlib:display-finish-output *display*))))
 
 (defmacro save-frame-excursion (&body body)
   "Execute body and then restore the current frame."
@@ -1537,7 +1541,7 @@ direction. The following are valid directions:
 
 (defun tile-group-unfloat-window (window group)
   (let ((frame (closest-frame window group)))
-    (dynamic-mixins:replace-class window 'tile-window :frame frame)
+    (dynamic-mixins-swm:replace-class window 'tile-window :frame frame)
     ;; (change-class window 'tile-window :frame frame)
     (setf (window-frame window) frame
           (frame-window frame) window
@@ -1553,7 +1557,7 @@ direction. The following are valid directions:
 
 (defun tile-group-float-window (window group)
   (let ((frame (tile-group-current-frame group)))
-    (dynamic-mixins:replace-class window 'float-window)
+    (dynamic-mixins-swm:replace-class window 'float-window)
     ;; (change-class window 'float-window)
     (float-window-align window)
     (update-decoration window)
