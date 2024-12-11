@@ -482,7 +482,7 @@ T (default) then also focus the frame."
   "Return a copy of the frame tree."
   (cond ((null tree) tree)
         ((typep tree 'frame)
-         (copy-structure tree))
+         (copy-frame tree))
         (t
          (mapcar #'copy-frame-tree tree))))
 
@@ -564,7 +564,7 @@ T (default) then also focus the frame."
 If ratio is an integer return the number of pixel desired."
   (if (integerp ratio)
       ratio
-      (* length ratio)))
+      (round (* length ratio))))
 
 (defun funcall-on-leaf (tree leaf fn)
   "Return a new tree with LEAF replaced with the result of calling FN on LEAF."
