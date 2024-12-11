@@ -75,6 +75,8 @@
           *window-parent-events*
           *message-window-padding*
           *message-window-y-padding*
+          *message-window-margin*
+          *message-window-y-margin*
           *message-window-gravity*
           *message-window-real-gravity*
           *message-window-input-gravity*
@@ -245,16 +247,15 @@ appear for. This must be an integer. If falsy, default to *timeout-wait*.")
   "The background color of the grabbed pointer.")
 
 ;;; Hooks
-
 (defvar *command-mode-start-hook* '(command-mode-start-message)
-  "A hook called whenever command mode is started")
+  "A hook called whenever command mode is started.")
 
 (defvar *command-mode-end-hook* '(command-mode-end-message)
-  "A hook called whenever command mode is ended")
+  "A hook called whenever command mode is ended.")
 
 (defvar *urgent-window-hook* '()
   "A hook called whenever a window sets the property indicating that
-  it demands the user's attention")
+  it demands the user's attention. Called with the window as an argument.")
 
 (defvar *map-window-hook* '()
   "A hook called whenever a window is mapped.")
@@ -265,10 +266,11 @@ appear for. This must be an integer. If falsy, default to *timeout-wait*.")
 (defvar *new-window-hook* '()
   "A hook called whenever a window is added to the window list. This
 includes a genuinely new window as well as bringing a withdrawn window
-back into the window list.")
+back into the window list. Called with the window as an argument.")
 
 (defvar *destroy-window-hook* '()
-  "A hook called whenever a window is destroyed or withdrawn.")
+  "A hook called whenever a window is destroyed or withdrawn.
+Called with the window as an argument.")
 
 (defvar *focus-window-hook* '()
   "A hook called when a window is given focus. It is called with 2
@@ -276,7 +278,7 @@ arguments: the current window and the last window (could be nil).")
 
 (defvar *place-window-hook* '()
   "A hook called whenever a window is placed by rule. Arguments are
-window group and frame")
+window, group and frame.")
 
 (defvar *pre-thread-hook* '()
   "A hook called before any threads are started. Useful if you need to fork.")
@@ -373,7 +375,6 @@ with 1 argument: the menu.")
 (defvar *new-head-hook* '()
   "A hook called whenever a head is added. It is called with 2 arguments: the
  new head and the current screen.")
-
 ;; Data types and globals used by stumpwm
 
 (defvar *display* nil
@@ -469,6 +470,16 @@ Include only those we are ready to support.")
 
 (defvar *message-window-y-padding* 0
   "The number of pixels that pad the text in the message window vertically.")
+
+(defvar *message-window-margin* 0
+  "The number of pixels (i.e. the gap) between the message window and the
+   horizontal edges of the head. The margin is disregarded if it takes more
+   space than is available.")
+
+(defvar *message-window-y-margin* 0
+  "The number of pixels (i.e. the gap) between the message window and the
+   vertical edges of the head. The margin is disregarded if it takes more
+   space than is available.")
 
 (defvar *message-window-gravity* :top-right
   "This variable controls where the message window appears. The following
@@ -771,7 +782,7 @@ exist, in which case they go into the current group.")
 (defvar *window-number-map* "0123456789"
   "Set this to a string to remap the window numbers to something more convenient.")
 
-(defvar *group-number-map* "1234567890"
+(defvar *group-number-map* "123456789"
   "Set this to a string to remap the group numbers to something more convenient.")
 
 (defvar *frame-number-map* "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -1323,7 +1334,8 @@ add rules")
 
 (defmacro define-frame-preference (target-group &body frame-rules)
   "Create a rule that matches windows and automatically places them in
-a specified group and frame. Each frame rule is a lambda list:
+a specified group and frame or converts them to floating windows. Each
+frame rule is a lambda list:
 @example
 \(frame-number raise lock &key from-group create restore dump-name class class-not
 instance instance-not type type-not role role-not title title-not
@@ -1336,7 +1348,9 @@ When nil, rule applies in the current group. When non nil, @var{lock} determines
 applicability of rule
 
 @item frame-number
-The frame number to send matching windows to
+The frame number to send matching windows to. If set to :float instead of a
+frame number, the window will be converted to a floating window. This is
+convenient for applications that should be launched as pop-ups.
 
 @item raise
 When non-nil, raise and focus the window in its frame
