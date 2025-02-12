@@ -86,13 +86,6 @@ further up. "
   (muffle-warning))
 
 (defmethod handle-top-level-condition ((c serious-condition))
-  (when (and (find-restart :remove-channel)
-             (not (typep *current-io-channel*
-                         '(or stumpwm-timer-channel
-                           display-channel
-                           request-channel))))
-    (message "Removed channel ~S due to uncaught error '~A'." *current-io-channel* c)
-    (invoke-restart :remove-channel))
   (ecase *top-level-error-action*
     (:message
      (let ((s (format nil "~&Caught '~a' at the top level. Please report this." c)))
@@ -121,7 +114,7 @@ further up. "
 (defvar *request-channel* nil)
 
 (defmethod io-channel-ioport (io-loop (channel request-channel))
-  (io-channel-ioport io-loop (request-channel-in channel)))
+  (sb-sys:fd-stream-fd (request-channel-in channel)))
 
 (defmethod io-channel-events ((channel request-channel))
   (list :read))
@@ -165,9 +158,12 @@ further up. "
   ((display :initarg :display)))
 
 (defmethod io-channel-ioport (io-loop (channel display-channel))
-  (io-channel-ioport io-loop (slot-value channel 'display)))
+  (sb-sys:fd-stream-fd
+    (xlib::display-input-stream (slot-value channel 'display))))
+
 (defmethod io-channel-events ((channel display-channel))
   (list :read :loop))
+
 (flet ((dispatch-all (display)
          (block handle
            (loop
@@ -222,12 +218,6 @@ further up. "
                 (string-equal host "unix"))
             :local)
            (t :internet)))))
-
-(defun ensure-data-dir ()
-  (ensure-directories-exist (data-dir) :mode #o700))
-
-(defun data-dir ()
-  (merge-pathnames ".stumpwm.d/" (user-homedir-pathname)))
 
 (defun close-resources ()
   (xlib:close-display *display*)
@@ -322,9 +312,7 @@ further up. "
     (dformat 0 "SIGHUP received: forcing immediate restart of stumpwm~%") ;; debug level 0 to "force" logging
     (force-stumpwm-restart))
   (let ((*in-main-thread* t))
-    (setf *data-dir*
-          (make-pathname :directory (append (pathname-directory (user-homedir-pathname))
-                                            (list ".stumpwm.d"))))
+    (setf *data-dir* (default-data-dir))
     (init-load-path *module-dir*)
     (loop
       (let ((ret (catch :top-level
