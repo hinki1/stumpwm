@@ -143,7 +143,10 @@ timer.")
   (find head *mode-lines* :key #'mode-line-head))
 
 (defun find-mode-line-by-window (xwin)
-  (find xwin *mode-lines* :key #'mode-line-window))
+  (find (xlib:window-id xwin) *mode-lines*
+        :key (lambda (ml)
+               (when-let ((win (mode-line-window ml)))
+                 (xlib:window-id win)))))
 
 (defun mode-line-gc (ml)
   (ccontext-gc (mode-line-cc ml)))
@@ -397,22 +400,36 @@ appropriate mode line click function."
 
 (add-hook *mode-line-click-hook* 'mode-line-click-dispatcher)
 
+(defun renumber-window (window number)
+  (let ((old-window (group-current-window (window-group window))))
+    (setf (group-current-window (window-group window)) window)
+    (renumber number)
+    (setf (group-current-window (window-group window)) old-window)))
+
 (flet ((ml-on-click-focus-window (code id &rest rest)
-         (declare (ignore code rest))
-         (when-let ((window (window-by-id id)))
-           (focus-all window)))
-       (ml-on-click-switch-to-group (code group &rest rest)
-         (declare (ignore rest code))
-         (when-let ((g (find-group (current-screen) group)))
-           (switch-to-group g)))
-       (ml-on-click-do-nothing (code &rest rest)
-         (declare (ignore rest code))
-         nil))
+           (declare (ignore rest))
+           (when-let ((window (window-by-id id)))
+             (case (decode-button-code code)
+               (:left-button (focus-all window))
+               (:wheel-up (renumber-window window (1+ (window-number window))))
+               (:middle-button
+                (if (typep window 'float-window)
+                    (unfloat-window window (window-group window))
+                    (float-window window (window-group window))))
+               (:wheel-down (renumber-window window (1- (window-number window))))
+               (:right-button (destroy-window window)))
+             (update-mode-lines (current-screen))))
+         (ml-on-click-switch-to-group (code group &rest rest)
+           (declare (ignore rest code))
+           (when-let ((g (find-group (current-screen) group)))
+             (switch-to-group g)))
+         (ml-on-click-do-nothing (code &rest rest)
+           (declare (ignore rest code))
+           nil))
   (register-ml-on-click-id :ml-on-click-focus-window #'ml-on-click-focus-window)
   (register-ml-on-click-id :ml-on-click-switch-to-group
                            #'ml-on-click-switch-to-group)
   (register-ml-on-click-id :ml-on-click-do-nothing #'ml-on-click-do-nothing))
-
 
 ;;; External mode lines
 
